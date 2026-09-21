@@ -2,12 +2,13 @@ const titleId = process.env.PLAYFAB_TITLE_ID || "164227";
 const baseUrl = `https://${titleId}.playfabapi.com`;
 
 function requireSecret() {
-  if (!process.env.PLAYFAB_TITLE_SECRET_KEY) {
+  const secretKey = process.env.PLAYFAB_TITLE_SECRET_KEY || process.env.PLAYFAB_SECRET_KEY;
+  if (!secretKey) {
     const error = new Error("DLC purchases are not configured yet.");
     error.statusCode = 503;
     throw error;
   }
-  return process.env.PLAYFAB_TITLE_SECRET_KEY;
+  return secretKey;
 }
 
 async function playFabServer(path, body) {
