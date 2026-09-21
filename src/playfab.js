@@ -9,8 +9,8 @@ export async function registerUser({ username, email, password, displayName }) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       TitleId: TITLE_ID,
-      Username: username.trim(),
-      Email: email.trim().toLowerCase(),
+      Username: username,
+      Email: email,
       Password: password,
       DisplayName: displayName || username,
       RequireBothUsernameAndEmail: true,
@@ -28,7 +28,7 @@ export async function loginWithEmail({ email, password }) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       TitleId: TITLE_ID,
-      Email: email.trim().toLowerCase(),
+      Email: email,
       Password: password,
     }),
   });
@@ -44,7 +44,7 @@ export async function loginWithUsername({ username, password }) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       TitleId: TITLE_ID,
-      Username: username.trim(),
+      Username: username,
       Password: password,
     }),
   });

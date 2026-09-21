@@ -1,23 +1,16 @@
-# Easy Express website and DLC store
+# React + Vite
 
-The React site keeps the existing PlayFab title (`164227`) account flow and adds an optional decoration DLC storefront. Real-money ownership is never granted by the browser.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## Local checks
+Currently, two official plugins are available:
 
-```sh
-npm install
-npm run lint
-npm run build
-```
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-Copy `.env.example` to the deployment environment. Never use a `VITE_` prefix for PayMongo or PlayFab server secrets; those values are bundled into client JavaScript.
+## React Compiler
 
-## Production setup
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-1. Configure `PAYMONGO_SECRET_KEY`, `PAYMONGO_DLC_WEBHOOK_SECRET`, `PLAYFAB_TITLE_SECRET_KEY` (or legacy `PLAYFAB_SECRET_KEY`), `PLAYFAB_TITLE_ID`, and `SITE_URL` as server-only Vercel environment variables.
-2. Register `POST /api/dlc/paymongo-webhook` for PayMongo's `checkout_session.payment.paid` event.
-3. Deploy and run a test purchase for each pack before announcing the store broadly.
-5. Verify that the webhook writes `DLC_ENTITLEMENTS` to PlayFab User Read-Only Data and an idempotent `DLC_ORDER_*` record to User Internal Data.
-6. Only after that end-to-end test should checkout be described as live.
+## Expanding the ESLint configuration
 
-`GET /api/dlc/owned` and `POST /api/dlc/checkout` authenticate the caller's PlayFab session ticket on the server. Checkout records are stored in PlayFab User Internal Data, and the signed PayMongo webhook is the only path that calls `processVerifiedPurchase` and grants an entitlement.
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
