@@ -793,11 +793,12 @@ function AuthModal({ mode, setMode, onClose, addToast, onAuthenticated }) {
     if (!formData.email.trim() || !formData.password.trim()) { setError("Please fill in all fields"); return; }
     setLoading(true); setError("");
     try {
-      const isEmail = formData.email.includes("@");
+      const identifier = formData.email.trim();
+      const isEmail = identifier.includes("@");
       const result = isEmail
-        ? await loginWithEmail({ email: formData.email, password: formData.password })
-        : await loginWithUsername({ username: formData.email, password: formData.password });
-      onAuthenticated({ sessionTicket: result.SessionTicket, playFabId: result.PlayFabId, username: formData.email });
+        ? await loginWithEmail({ email: identifier, password: formData.password })
+        : await loginWithUsername({ username: identifier, password: formData.password });
+      onAuthenticated({ sessionTicket: result.SessionTicket, playFabId: result.PlayFabId, username: identifier });
       setSuccessType("login"); setShowSuccess(true);
       addToast({ type: "welcome", title: "Welcome Back!", message: "Launch the game to continue your shop.", duration: 5000 });
     } catch (err) { setError(err.message); }
