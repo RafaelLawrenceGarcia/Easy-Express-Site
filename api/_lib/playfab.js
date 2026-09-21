@@ -62,6 +62,26 @@ export async function getOwnedEntitlements(playFabId) {
   return parseEntitlements(result?.Data?.DLC_ENTITLEMENTS);
 }
 
+function checkoutKey(orderId) {
+  if (!/^[a-f0-9]{32}$/.test(orderId || "")) throw new Error("Checkout reference is invalid.");
+  return `DLC_CHECKOUT_${orderId}`;
+}
+
+export async function savePendingDlcCheckout(playFabId, orderId, checkout) {
+  await playFabServer("UpdateUserInternalData", {
+    PlayFabId: playFabId,
+    Data: { [checkoutKey(orderId)]: JSON.stringify(checkout) },
+  });
+}
+
+export async function getPendingDlcCheckout(playFabId, orderId) {
+  const key = checkoutKey(orderId);
+  const result = await playFabServer("GetUserInternalData", { PlayFabId: playFabId, Keys: [key] });
+  const value = result?.Data?.[key]?.Value;
+  if (!value) return null;
+  try { return JSON.parse(value); } catch { return null; }
+}
+
 export async function processVerifiedPurchase({ playFabId, packId, entitlement, orderId, providerEventId }) {
   const orderKey = `DLC_ORDER_${orderId}`;
   const existing = await playFabServer("GetUserInternalData", {

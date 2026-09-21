@@ -339,7 +339,7 @@ function DlcStore({ account, onAuth, addToast }) {
         </div>
 
         <div style={{ marginTop: 28, padding: 20, background: CARD2, border: `1px solid ${BD}`, borderRadius: 12, color: TD, fontFamily: F1, fontSize: 12, lineHeight: 1.7 }}>
-          <strong style={{ color: WN }}>DEVELOPMENT STATUS:</strong> Checkout is disabled until Stripe price IDs, webhook signing, PlayFab server credentials, and production deployment are configured and tested. A successful browser redirect alone never grants DLC. Purchases are tied to the Easy Express account verified at checkout.
+          <strong style={{ color: OK }}>SECURE PURCHASE FLOW:</strong> Checkout is hosted by PayMongo. A signed payment webhook must verify the completed transaction before PlayFab grants DLC ownership; a browser redirect alone never unlocks content. Purchases remain tied to the Easy Express account verified at checkout.
         </div>
       </div>
     </section>
