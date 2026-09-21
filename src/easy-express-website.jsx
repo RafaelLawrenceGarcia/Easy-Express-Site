@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { registerUser, loginWithEmail, loginWithUsername, executeCloudScript } from './playfab';
 import { sendOTPEmail } from './email';
+import { DLC_CATALOG } from './dlc-catalog';
+import { createDlcCheckout, getOwnedDlc } from './dlc-api';
 
 /* ═══════════════════════════════════════════
    ERROR BOUNDARY — catches crashes, shows error
@@ -92,6 +94,9 @@ const FAQS = [
   { q: "I didn't receive my OTP email.", a: "Check your spam/junk folder. The email comes from easyexpress.4r@gmail.com. You can also click Resend Code on the verification screen." },
   { q: "Can I play on Mac or Linux?", a: "Currently, Easy Express is Windows-only (Windows 10/11). Mac and Linux support is not planned." },
   { q: "Is this affiliated with EasyPC or PC Express?", a: "No. Easy Express is an independent thesis project inspired by the Philippine PC retail scene. We are not affiliated with any real retailer." },
+  { q: "Are decoration DLC packs required?", a: "No. Decoration DLC is optional, the base game remains fully playable without it, and repair skill and normal shop progression remain the main sources of reputation." },
+  { q: "How does DLC connect to my game?", a: "Purchase with the same Easy Express account used by the game. Payment is verified by the server before the entitlement is granted; then restart the game or use SYNC PURCHASES in the Decoration Shop." },
+  { q: "Where can I get purchase or refund help?", a: "Purchase and refund support details will be published before checkout goes live. Until the payment provider, webhook, and entitlement service are configured and tested, this store remains in development mode." },
 ];
 
 /* ═══════════════════════════════════════════
@@ -114,7 +119,7 @@ function ToastContainer({ toasts, removeToast }) {
   return (
     <div style={{ position: "fixed", top: 80, right: 20, zIndex: 300, display: "flex", flexDirection: "column", gap: 12, pointerEvents: "none", maxWidth: 400 }}>
       {toasts.map((t) => (
-        <SingleToast key={t.id} toast={t} onDone={() => removeToast(t.id)} />
+        <SingleToast key={t.id} toast={t} onDone={removeToast} />
       ))}
     </div>
   );
@@ -123,11 +128,12 @@ function ToastContainer({ toasts, removeToast }) {
 function SingleToast({ toast, onDone }) {
   const [vis, setVis] = useState(false);
   const [out, setOut] = useState(false);
+  const duration = toast.duration || 4000;
   useEffect(() => {
     requestAnimationFrame(() => setVis(true));
-    const timer = setTimeout(() => { setOut(true); setTimeout(onDone, 400); }, toast.duration || 4000);
+    const timer = setTimeout(() => { setOut(true); setTimeout(() => onDone(toast.id), 400); }, duration);
     return () => clearTimeout(timer);
-  }, []);
+  }, [duration, onDone, toast.id]);
   const icons = { success: "✓", error: "✕", info: "ℹ", welcome: "👋" };
   const colors = { success: OK, error: A2, info: A, welcome: PU };
   const c = colors[toast.type] || A;
@@ -140,7 +146,7 @@ function SingleToast({ toast, onDone }) {
       opacity: vis && !out ? 1 : 0, transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
       overflow: "hidden", position: "relative",
     }}>
-      <div style={{ position: "absolute", bottom: 0, left: 0, height: 3, background: c, animation: `toastTimer ${(toast.duration || 4000) / 1000}s linear forwards` }} />
+      <div style={{ position: "absolute", bottom: 0, left: 0, height: 3, background: c, animation: `toastTimer ${duration / 1000}s linear forwards` }} />
       <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: `${c}18`, border: `1px solid ${c}30`, display: "grid", placeItems: "center", color: c, fontSize: 16, fontWeight: 800, fontFamily: F2 }}>
         {icons[toast.type]}
       </div>
@@ -148,7 +154,7 @@ function SingleToast({ toast, onDone }) {
         <div style={{ fontFamily: F2, fontSize: 13, fontWeight: 700, color: T, marginBottom: 3 }}>{toast.title}</div>
         <div style={{ fontFamily: F1, fontSize: 12, color: TD, lineHeight: 1.5 }}>{toast.message}</div>
       </div>
-      <button onClick={() => { setOut(true); setTimeout(onDone, 400); }} style={{ background: "none", border: "none", color: TD, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 4, flexShrink: 0 }}>
+      <button onClick={() => { setOut(true); setTimeout(() => onDone(toast.id), 400); }} style={{ background: "none", border: "none", color: TD, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 4, flexShrink: 0 }}>
         {"✕"}
       </button>
     </div>
@@ -217,14 +223,14 @@ function PwStrength({ password }) {
 /* ═══════════════════════════════════════════
    NAV
    ═══════════════════════════════════════════ */
-function Nav({ onAuth, activeSection }) {
+function Nav({ onAuth, activeSection, account }) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", h);
     return () => window.removeEventListener("scroll", h);
   }, []);
-  const links = ["features", "scenarios", "news", "specs", "faq", "about"];
+  const links = ["features", "scenarios", "news", "dlc-store", "specs", "faq", "about"];
   return (
     <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, background: scrolled ? `${BG}f0` : `${BG}cc`, backdropFilter: "blur(20px)", borderBottom: `1px solid ${scrolled ? BD : "transparent"}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 clamp(1rem,4vw,3rem)", height: 64, fontFamily: F1, transition: "all 0.3s" }}>
       <a href="#hero" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 10 }}>
@@ -233,13 +239,110 @@ function Nav({ onAuth, activeSection }) {
       </a>
       <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
         {links.map((l) => (
-          <a key={l} href={`#${l}`} style={{ color: activeSection === l ? A : TD, textDecoration: "none", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.5, transition: "color 0.3s" }}>{l}</a>
+          <a key={l} href={`#${l}`} style={{ color: activeSection === l ? A : TD, textDecoration: "none", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.5, transition: "color 0.3s" }}>{l === "dlc-store" ? "DLC STORE" : l}</a>
         ))}
         <div style={{ width: 1, height: 20, background: BD, margin: "0 4px" }} />
-        <button onClick={() => onAuth("login")} style={{ background: "transparent", border: `1px solid ${A}40`, color: A, padding: "7px 18px", borderRadius: 6, fontFamily: F1, fontWeight: 600, fontSize: 13, cursor: "pointer", letterSpacing: 1 }}>LOG IN</button>
+        <button onClick={() => onAuth("login")} style={{ background: "transparent", border: `1px solid ${A}40`, color: A, padding: "7px 18px", borderRadius: 6, fontFamily: F1, fontWeight: 600, fontSize: 13, cursor: "pointer", letterSpacing: 1 }}>{account ? "ACCOUNT" : "LOG IN"}</button>
         <button onClick={() => onAuth("signup")} style={{ background: `linear-gradient(135deg,${A},#00b8d4)`, border: "none", color: BG, padding: "8px 20px", borderRadius: 6, fontFamily: F1, fontWeight: 700, fontSize: 13, cursor: "pointer", letterSpacing: 1 }}>SIGN UP</button>
       </div>
     </nav>
+  );
+}
+
+function DlcStore({ account, onAuth, addToast }) {
+  const [owned, setOwned] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [pendingPack, setPendingPack] = useState("");
+  const query = new URLSearchParams(window.location.search);
+  const purchaseState = query.get("purchase");
+  const selectedPack = query.get("pack");
+  const selectedCatalogPack = DLC_CATALOG.find((pack) => pack.packId === selectedPack);
+  const returnedPurchaseIsOwned = selectedCatalogPack && owned.includes(selectedCatalogPack.entitlement);
+
+  const refreshOwnership = useCallback(async () => {
+    if (!account?.sessionTicket) return;
+    setLoading(true);
+    try {
+      const result = await getOwnedDlc(account.sessionTicket);
+      setOwned(result.entitlements || []);
+      addToast({ type: "success", title: "Entitlements Updated", message: "Owned DLC is synchronized with your Easy Express account." });
+    } catch (error) {
+      addToast({ type: "error", title: "Sync Failed", message: error.message });
+    } finally {
+      setLoading(false);
+    }
+  }, [account, addToast]);
+
+  useEffect(() => {
+    if (account?.sessionTicket) refreshOwnership();
+  }, [account?.sessionTicket, refreshOwnership]);
+
+  const purchase = async (pack) => {
+    if (!account?.sessionTicket) {
+      onAuth("login");
+      addToast({ type: "info", title: "Login Required", message: "Sign in with the account you use in Easy Express before purchasing DLC." });
+      return;
+    }
+    setPendingPack(pack.packId);
+    try {
+      const result = await createDlcCheckout(account.sessionTicket, pack.packId);
+      window.location.assign(result.checkoutUrl);
+    } catch (error) {
+      addToast({ type: "error", title: "Checkout Unavailable", message: error.message });
+      setPendingPack("");
+    }
+  };
+
+  const banner = purchaseState === "success" || (purchaseState === "pending" && returnedPurchaseIsOwned)
+    ? { color: OK, title: "PURCHASE VERIFIED", body: "This DLC is attached to your Easy Express account. Open the game and choose SYNC PURCHASES." }
+    : purchaseState === "pending"
+      ? { color: A, title: "PURCHASE PENDING VERIFICATION", body: "The checkout returned successfully, but only the signed payment webhook can grant ownership. Refresh after a moment; do not repurchase while verification is pending." }
+    : purchaseState === "cancelled"
+      ? { color: WN, title: "PURCHASE CANCELLED", body: "Nothing was unlocked by this page. Your DLC remains unchanged." }
+      : purchaseState === "failed"
+        ? { color: A2, title: "PURCHASE FAILED", body: "The purchase was not verified. No DLC entitlement has been granted." }
+        : null;
+
+  return (
+    <section id="dlc-store" style={{ position: "relative", padding: "100px clamp(1rem,4vw,3rem)", borderTop: `1px solid ${BD}`, borderBottom: `1px solid ${BD}`, overflow: "hidden" }}>
+      <CircuitBG />
+      <div style={{ position: "relative", maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 24, alignItems: "end", flexWrap: "wrap", marginBottom: 36 }}>
+          <div style={{ maxWidth: 760 }}>
+            <span style={{ color: OK, fontFamily: F2, fontSize: 11, letterSpacing: 3 }}>OPTIONAL WORKSHOP EXPANSIONS</span>
+            <h2 style={{ fontFamily: F2, fontSize: "clamp(2rem,5vw,3.2rem)", color: T, margin: "12px 0" }}>DLC Store</h2>
+            <p style={{ color: TD, fontFamily: F1, lineHeight: 1.7 }}>Upgrade your workshop with optional decoration packs designed to improve presentation, comfort, and customer confidence.</p>
+            <p style={{ color: TD, fontFamily: F1, lineHeight: 1.7, fontSize: 13, marginTop: 8 }}>Small presentation bonuses use the existing capped furniture reputation system. DLC never replaces repair skill or normal progression.</p>
+          </div>
+          <button onClick={account ? refreshOwnership : () => onAuth("login")} disabled={loading} style={{ background: `${A}12`, border: `1px solid ${A}55`, color: A, padding: "12px 18px", borderRadius: 9, fontFamily: F1, fontWeight: 800, cursor: "pointer" }}>
+            {loading ? "REFRESHING..." : account ? "REFRESH OWNERSHIP" : "LOG IN TO VIEW MY DLC"}
+          </button>
+        </div>
+
+        {banner && <div style={{ marginBottom: 28, padding: "16px 20px", borderRadius: 12, background: `${banner.color}0c`, border: `1px solid ${banner.color}55` }}><div style={{ color: banner.color, fontFamily: F2, fontSize: 12, marginBottom: 6 }}>{banner.title}{selectedPack ? ` • ${selectedPack}` : ""}</div><div style={{ color: T, fontFamily: F1, fontSize: 13, lineHeight: 1.6 }}>{banner.body}</div></div>}
+
+        <div style={{ marginBottom: 22, color: account ? T : TD, fontFamily: F1, fontSize: 12 }}><strong style={{ color: A, fontFamily: F2 }}>MY DLC / OWNED CONTENT:</strong> {account ? (owned.length ? `${owned.length} PACK${owned.length === 1 ? "" : "S"} VERIFIED` : "NO VERIFIED PACKS ON THIS ACCOUNT") : "LOG IN TO VIEW ACCOUNT ENTITLEMENTS"}</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))", gap: 20 }}>
+          {DLC_CATALOG.map((pack) => {
+            const isOwned = owned.includes(pack.entitlement);
+            const isPending = pendingPack === pack.packId;
+            return <article id={pack.packId} key={pack.packId} style={{ background: CARD, border: `1px solid ${isOwned ? OK : pack.accent}45`, borderRadius: 16, padding: 24, boxShadow: `0 0 32px ${pack.accent}0b`, display: "flex", flexDirection: "column" }}>
+              <div style={{ height: 128, borderRadius: 12, background: `linear-gradient(135deg,${pack.accent}22,${BG})`, border: `1px solid ${pack.accent}33`, display: "grid", placeItems: "center", marginBottom: 20, color: pack.accent, fontFamily: F2, fontSize: 44 }}>EE<span style={{ fontSize: 13, letterSpacing: 2 }}>DLC</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}><div><div style={{ color: pack.accent, fontFamily: F2, fontSize: 10, letterSpacing: 2 }}>{pack.tagline.toUpperCase()}</div><h3 style={{ color: T, fontFamily: F2, fontSize: 19, margin: "8px 0" }}>{pack.name}</h3></div><span style={{ color: isOwned ? OK : T, background: isOwned ? `${OK}12` : CARD2, border: `1px solid ${isOwned ? OK : BD}`, borderRadius: 20, padding: "5px 9px", fontFamily: F2, fontSize: 9 }}>{isOwned ? "OWNED" : pack.price}</span></div>
+              <p style={{ color: TD, fontFamily: F1, fontSize: 13, lineHeight: 1.6 }}>{pack.description}</p>
+              <ul style={{ color: T, fontFamily: F1, fontSize: 12, lineHeight: 1.8, paddingLeft: 20, margin: "16px 0" }}>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul>
+              <div style={{ color: OK, fontFamily: F1, fontSize: 11, lineHeight: 1.5, padding: 12, background: `${OK}08`, borderRadius: 9, marginBottom: 18 }}>{pack.benefit}</div>
+              <button onClick={() => purchase(pack)} disabled={isOwned || isPending} style={{ marginTop: "auto", padding: 13, borderRadius: 9, border: "none", background: isOwned ? `${OK}18` : `linear-gradient(135deg,${pack.accent},${A})`, color: isOwned ? OK : BG, fontFamily: F1, fontWeight: 800, cursor: isOwned ? "default" : "pointer" }}>{isOwned ? "OWNED • OPEN GAME TO PLACE" : isPending ? "CREATING SECURE CHECKOUT..." : "PURCHASE ON SECURE CHECKOUT"}</button>
+            </article>;
+          })}
+        </div>
+
+        <div style={{ marginTop: 28, padding: 20, background: CARD2, border: `1px solid ${BD}`, borderRadius: 12, color: TD, fontFamily: F1, fontSize: 12, lineHeight: 1.7 }}>
+          <strong style={{ color: WN }}>DEVELOPMENT STATUS:</strong> Checkout is disabled until Stripe price IDs, webhook signing, PlayFab server credentials, and production deployment are configured and tested. A successful browser redirect alone never grants DLC. Purchases are tied to the Easy Express account verified at checkout.
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -628,7 +731,7 @@ function OtpView({ formData, otpCode, setOtpCode, otpRefs, handleVerifyOTP, hand
 /* ═══════════════════════════════════════════
    AUTH MODAL — MAIN
    ═══════════════════════════════════════════ */
-function AuthModal({ mode, setMode, onClose, addToast }) {
+function AuthModal({ mode, setMode, onClose, addToast, onAuthenticated }) {
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState(["", "", "", "", "", ""]);
   const otpRefs = useRef([]);
@@ -668,6 +771,7 @@ function AuthModal({ mode, setMode, onClose, addToast }) {
     try {
       const r = await executeCloudScript({ sessionTicket, functionName: "verifyOTP", functionParameter: { code } });
       if (r.FunctionResult.success) {
+        onAuthenticated({ sessionTicket, username: formData.username });
         setSuccessType("signup"); setShowSuccess(true);
         addToast({ type: "success", title: "Account Created!", message: "Welcome to Easy Express, " + formData.username + "!", duration: 6000 });
       } else { setError(r.FunctionResult.error); }
@@ -690,8 +794,10 @@ function AuthModal({ mode, setMode, onClose, addToast }) {
     setLoading(true); setError("");
     try {
       const isEmail = formData.email.includes("@");
-      if (isEmail) { await loginWithEmail({ email: formData.email, password: formData.password }); }
-      else { await loginWithUsername({ username: formData.email, password: formData.password }); }
+      const result = isEmail
+        ? await loginWithEmail({ email: formData.email, password: formData.password })
+        : await loginWithUsername({ username: formData.email, password: formData.password });
+      onAuthenticated({ sessionTicket: result.SessionTicket, playFabId: result.PlayFabId, username: formData.email });
       setSuccessType("login"); setShowSuccess(true);
       addToast({ type: "welcome", title: "Welcome Back!", message: "Launch the game to continue your shop.", duration: 5000 });
     } catch (err) { setError(err.message); }
@@ -899,6 +1005,9 @@ function AuthModal({ mode, setMode, onClose, addToast }) {
 export default function EasyExpressSite() {
   const [authModal, setAuthModal] = useState(null);
   const [activeSection, setActiveSection] = useState("");
+  const [account, setAccount] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("easyExpressAccount")) || null; } catch { return null; }
+  });
   const { toasts, addToast, removeToast } = useToasts();
 
   useEffect(() => {
@@ -906,7 +1015,7 @@ export default function EasyExpressSite() {
       (entries) => { entries.forEach((entry) => { if (entry.isIntersecting) setActiveSection(entry.target.id); }); },
       { threshold: 0.3 }
     );
-    ["features", "scenarios", "news", "specs", "faq", "about"].forEach((id) => {
+    ["features", "scenarios", "news", "dlc-store", "specs", "faq", "about"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) observer.observe(el);
     });
@@ -939,18 +1048,19 @@ export default function EasyExpressSite() {
         `}</style>
 
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <Nav onAuth={setAuthModal} activeSection={activeSection} />
+        <Nav onAuth={setAuthModal} activeSection={activeSection} account={account} />
         <Hero onAuth={setAuthModal} />
         <Features />
         <Scenarios />
         <NewsSection />
+        <DlcStore account={account} onAuth={setAuthModal} addToast={addToast} />
         <SystemRequirements />
         <FaqSection />
         <About />
         <Footer />
 
         {authModal && (
-          <AuthModal mode={authModal} setMode={setAuthModal} onClose={() => setAuthModal(null)} addToast={addToast} />
+          <AuthModal mode={authModal} setMode={setAuthModal} onClose={() => setAuthModal(null)} addToast={addToast} onAuthenticated={(nextAccount) => { setAccount(nextAccount); sessionStorage.setItem("easyExpressAccount", JSON.stringify(nextAccount)); }} />
         )}
       </div>
     </ErrorBoundary>

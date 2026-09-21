@@ -1,16 +1,24 @@
-# React + Vite
+# Easy Express website and DLC store
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The React site keeps the existing PlayFab title (`164227`) account flow and adds an optional decoration DLC storefront. Real-money ownership is never granted by the browser.
 
-Currently, two official plugins are available:
+## Local checks
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```sh
+npm install
+npm run lint
+npm run build
+```
 
-## React Compiler
+Copy `.env.example` to the deployment environment. Never use a `VITE_` prefix for Stripe or PlayFab server secrets; those values are bundled into client JavaScript.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Production setup
 
-## Expanding the ESLint configuration
+1. Create one Stripe Price for each pack and configure the three `STRIPE_PRICE_*` variables.
+2. Configure `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PLAYFAB_TITLE_SECRET_KEY`, `PLAYFAB_TITLE_ID`, and `SITE_URL` as server-only Vercel environment variables.
+3. Register `POST /api/dlc/stripe-webhook` for Stripe's `checkout.session.completed` event.
+4. Deploy and run a test-mode purchase for each pack.
+5. Verify that the webhook writes `DLC_ENTITLEMENTS` to PlayFab User Read-Only Data and an idempotent `DLC_ORDER_*` record to User Internal Data.
+6. Only after that end-to-end test should checkout be described as live.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+`GET /api/dlc/owned` and `POST /api/dlc/checkout` authenticate the caller's PlayFab session ticket on the server. The signed Stripe webhook is the only path that calls `processVerifiedPurchase` and grants an entitlement.
